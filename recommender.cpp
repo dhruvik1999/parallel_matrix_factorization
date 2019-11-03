@@ -52,8 +52,10 @@ public:
     
     void buildItemToItemC() {
         itemToItem = vector<vector<double> > (itemSize+1, vector<double> (itemSize+1));
+        
         #pragma omp parallel for schedule(static)
         for(int i=1; i<= itemSize; i++) {
+            
             #pragma omp parallel for schedule(static)
             for(int j=1; j <= itemSize; j++) {
                 double top = 0, bleft =0, bright = 0;
@@ -84,11 +86,14 @@ public:
     void buildItemToItemP() {
         getAverage();
         itemToItem = vector<vector<double> > (itemSize+1, vector<double> (itemSize+1));
+        #pragma omp parallel for schedule(dynamic)
         for(int i=1; i<= itemSize; i++) {
+            #pragma omp parallel for schedule(dynamic)
             for(int j=1; j <= itemSize; j++) {
                 double top = 0, bleft =0, bright = 0;
                 
                 int cnt = 0;
+                #pragma omp parallel for reduction(+:cnt,top,bleft,bright)
                 for(int k=1; k<= userSize; k++) {
                     if(userToItem[k][i] == EMPTY) continue;
                     if(userToItem[k][j] == EMPTY) continue;
@@ -118,6 +123,7 @@ public:
             return 3;
         }
         
+        #pragma omp parallel for reduction(+:bottom,top) schedule(auto)
         for(int i=1;i<=itemSize; i++) {
             if(userToItem[user][i] == EMPTY) continue;
             
@@ -169,6 +175,8 @@ public:
         input.pop_back();
         
         userToItem = vector<vector<double> > (maxUser+1, vector<double> (maxItem+1, EMPTY));
+
+        #pragma  omp parallel for private(user,item,rating)
         for(int i=0;i<input.size();i++) {
             user = input[i].user, item = input[i].item, rating = input[i].rating;
             userToItem[user][item]= rating;
@@ -225,6 +233,8 @@ int main(int argc, const char * argv[]) {
     
     double RSME = 0.0;
     
+
+    #pragma omp parallel for reduction(+:RSME) 
     for(int i=0;i<test.size();i++) {
         int user = test[i].user;
         int item = test[i].item;
@@ -233,6 +243,7 @@ int main(int argc, const char * argv[]) {
         double predict = cf.predict(user, item);
         
         RSME += (predict-rating)*(predict-rating);
+        #pragma omp critical
         outputPrinter.addLine(user, item, predict);
     }
     
