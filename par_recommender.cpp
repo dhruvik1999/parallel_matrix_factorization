@@ -31,28 +31,42 @@ public:
     }
     
     void getAverage() {
+        #pragma omp parallel for schedule(dynamic) //chunk size is depen on the machine
         for(int i=1;i<=userSize;i++) {
             int cnt = 0;
+            int par_temp = 0;
+
+            // used reduction because it contains the local compy of par_temp and update withoud over-write
+            #pragma omp parallel for reduction(+:par_temp,cnt)
             for(int j=1;j<=itemSize;j++) {
-                if(userToItem[i][j] == EMPTY) continue;
+                if(userToItem[i][j] == EMPTY)
+                	continue;
                 cnt++;
-                average[i] += userToItem[i][j];
+                par_temp+= userToItem[i][j]; // to reduce over-write condition
             }
+
+            average[i]=par_temp;
             average[i] /= (double)cnt;
         }
     }
     
     void buildItemToItemC() {
         itemToItem = vector<vector<double> > (itemSize+1, vector<double> (itemSize+1));
+        
+        #pragma omp parallel for schedule(static)
         for(int i=1; i<= itemSize; i++) {
+            
+            #pragma omp parallel for schedule(static)
             for(int j=1; j <= itemSize; j++) {
                 double top = 0, bleft =0, bright = 0;
                 
                 int cnt = 0;
+
+                #pragma omp parallel for reduction(+:top,bleft,bright)
                 for(int k=1; k<= userSize; k++) {
                     if(userToItem[k][i] == EMPTY) continue;
                     if(userToItem[k][j] == EMPTY) continue;
-                    
+            
                     cnt++;
                     top += userToItem[k][i]*userToItem[k][j];
                     
@@ -72,11 +86,14 @@ public:
     void buildItemToItemP() {
         getAverage();
         itemToItem = vector<vector<double> > (itemSize+1, vector<double> (itemSize+1));
+        #pragma omp parallel for schedule(dynamic)
         for(int i=1; i<= itemSize; i++) {
+            #pragma omp parallel for schedule(dynamic)
             for(int j=1; j <= itemSize; j++) {
                 double top = 0, bleft =0, bright = 0;
                 
                 int cnt = 0;
+                #pragma omp parallel for reduction(+:cnt,top,bleft,bright)
                 for(int k=1; k<= userSize; k++) {
                     if(userToItem[k][i] == EMPTY) continue;
                     if(userToItem[k][j] == EMPTY) continue;
@@ -106,6 +123,7 @@ public:
             return 3;
         }
         
+        #pragma omp parallel for reduction(+:bottom,top) schedule(auto)
         for(int i=1;i<=itemSize; i++) {
             if(userToItem[user][i] == EMPTY) continue;
             
@@ -157,6 +175,8 @@ public:
         input.pop_back();
         
         userToItem = vector<vector<double> > (maxUser+1, vector<double> (maxItem+1, EMPTY));
+
+        #pragma  omp parallel for private(user,item,rating)
         for(int i=0;i<input.size();i++) {
             user = input[i].user, item = input[i].item, rating = input[i].rating;
             userToItem[user][item]= rating;
@@ -191,7 +211,7 @@ public:
 };
 
 int main(int argc, const char * argv[]) {
-    long time1 = omp_get_wtime();
+	long time1 = omp_get_wtime();
     if(argc!=3) {
         cout << "Please follow this format. recommender.exe [base file name] [test file name]";
         return 0;
@@ -213,6 +233,8 @@ int main(int argc, const char * argv[]) {
     
     double RSME = 0.0;
     
+
+    #pragma omp parallel for reduction(+:RSME) 
     for(int i=0;i<test.size();i++) {
         int user = test[i].user;
         int item = test[i].item;
@@ -221,6 +243,7 @@ int main(int argc, const char * argv[]) {
         double predict = cf.predict(user, item);
         
         RSME += (predict-rating)*(predict-rating);
+        #pragma omp critical
         outputPrinter.addLine(user, item, predict);
     }
     
