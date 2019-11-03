@@ -31,11 +31,13 @@ public:
     }
     
     void getAverage() {
+        #pragma omp parallel for schedule(dynamic) //chunk size is depen on the machine
         for(int i=1;i<=userSize;i++) {
             int cnt = 0;
             int par_temp = 0;
 
-            #pragma omp parallel for reduction(+:par_temp)
+            // used reduction because it contains the local compy of par_temp and update withoud over-write
+            #pragma omp parallel for reduction(+:par_temp,cnt)
             for(int j=1;j<=itemSize;j++) {
                 if(userToItem[i][j] == EMPTY)
                 	continue;
@@ -50,15 +52,19 @@ public:
     
     void buildItemToItemC() {
         itemToItem = vector<vector<double> > (itemSize+1, vector<double> (itemSize+1));
+        #pragma omp parallel for schedule(static)
         for(int i=1; i<= itemSize; i++) {
+            #pragma omp parallel for schedule(static)
             for(int j=1; j <= itemSize; j++) {
                 double top = 0, bleft =0, bright = 0;
                 
                 int cnt = 0;
+
+                #pragma omp parallel for reduction(+:top,bleft,bright)
                 for(int k=1; k<= userSize; k++) {
                     if(userToItem[k][i] == EMPTY) continue;
                     if(userToItem[k][j] == EMPTY) continue;
-                    
+            
                     cnt++;
                     top += userToItem[k][i]*userToItem[k][j];
                     
